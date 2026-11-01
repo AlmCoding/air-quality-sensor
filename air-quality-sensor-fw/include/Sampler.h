@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Display.h"
+
 #include <SensirionI2cScd4x.h>
 
 #include <cstdint>
@@ -20,6 +22,7 @@ private:
   bool readMeasurement(uint16_t &co2Ppm, float &tempC, float &rhPct);
   void recordSampleTime();
 
+  Display display_;
   SensirionI2cScd4x sensor_;
   bool initialized_ = false;
   bool hasSampled_ = false;

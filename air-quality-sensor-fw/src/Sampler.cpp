@@ -16,39 +16,55 @@
 #define DEBUG_ERROR(...)
 #endif
 
+namespace {
+
+constexpr bool kScd41Enabled = false;
+
+} // namespace
+
 bool Sampler::init() {
   Wire.begin();
-  sensor_.begin(Wire, SCD41_I2C_ADDR_62);
 
-  const int16_t error = sensor_.startPeriodicMeasurement();
-  if (error != 0) {
-    DEBUG_ERROR("SCD41 startPeriodicMeasurement failed: %d\n", error);
+  if (kScd41Enabled) {
+    sensor_.begin(Wire, SCD41_I2C_ADDR_62);
+
+    const int16_t error = sensor_.startPeriodicMeasurement();
+    if (error != 0) {
+      DEBUG_ERROR("SCD41 startPeriodicMeasurement failed: %d", error);
+      return false;
+    }
+  }
+
+  if (!display_.init()) {
+    DEBUG_ERROR("SSD1306 display initialization failed!");
     return false;
   }
 
-  DEBUG_INFO("SCD41 initialized successfully\n");
+  DEBUG_INFO("Sampler initialized successfully!");
   initialized_ = true;
   return true;
 }
 
 void Sampler::run() {
-  if (!initialized_) {
+  if (!initialized_ || !isSampleDue() || (kScd41Enabled && !isDataReady())) {
     return;
   }
 
-  if (!isSampleDue() || !isDataReady()) {
-    return;
-  }
+  DEBUG_INFO("Sampling air quality data ...\n");
 
-  DEBUG_INFO("Sampling SCD41 sensor ...\n");
-
+  bool windowOpen = false;
   uint16_t co2Ppm = 0;
   float tempC = 0.0f;
   float rhPct = 0.0f;
-  if (!readMeasurement(co2Ppm, tempC, rhPct)) {
+  if (kScd41Enabled && !readMeasurement(co2Ppm, tempC, rhPct)) {
     return;
   }
   recordSampleTime();
+  display_.show({co2Ppm, tempC, rhPct, windowOpen});
+
+  if (!kScd41Enabled) {
+    return;
+  }
 
   if (!Clock::instance().isSet()) {
     DEBUG_ERROR("Skipping sample storage due to clock not set!");
@@ -80,7 +96,7 @@ void Sampler::run() {
     }
   }
 
-  if (!dataStore.addSample(co2Ppm, tempC, rhPct, false)) {
+  if (!dataStore.addSample(co2Ppm, tempC, rhPct, windowOpen)) {
     DEBUG_ERROR("Failed to store SCD41 sample!");
   }
 }
@@ -111,7 +127,7 @@ bool Sampler::readMeasurement(uint16_t &co2Ppm, float &tempC, float &rhPct) {
     return false;
   }
 
-  DEBUG_INFO("SCD41 measurement: CO2=%u ppm, Temp=%.2f C, RH=%.2f %%\n", //
+  DEBUG_INFO("SCD41 measurement: CO2=%u ppm, Temp=%.2f C, RH=%.2f %%", //
              co2Ppm, tempC, rhPct);
   return true;
 }

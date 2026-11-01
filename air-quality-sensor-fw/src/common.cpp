@@ -15,6 +15,5 @@ void debugPrint(const char *prefix, const char *fmt, ...) {
   va_end(ap);
 
   Serial.print(msg);
-
   Serial.print("\n");
 }
