@@ -20,6 +20,7 @@ Sampler sampler;
 } // namespace
 
 void setup() {
+  setCpuFrequencyMhz(160);
   Serial.begin(921600);
 
 #if (ENABLE_DEBUG_OUTPUT == 1)
@@ -30,9 +31,17 @@ void setup() {
   }
 #endif
 
+  DEBUG_INFO(DIVIDER);
+  DEBUG_INFO("Setup Air Quality Sensor [...]");
+  DEBUG_INFO("Firmware version: %s", FIRMWARE_VERSION);
+  DEBUG_INFO("Free heap: %u bytes", ESP.getFreeHeap());
+  DEBUG_INFO("CPU frequency: %d MHz", getCpuFrequencyMhz());
+
   if (!sampler.init()) {
     DEBUG_ERROR("Failed to initialize sampler!");
   }
+
+  DEBUG_INFO("Setup Air Quality Sensor [OK]");
 }
 
 void loop() { sampler.run(); }

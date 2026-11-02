@@ -18,21 +18,21 @@ namespace {
 
 constexpr time_t kEarliestValidTime = 946080000; // 1999-12-31 00:00:00 UTC
 
-bool isLeapYear(int year) {
+bool isLeapYear(int32_t year) {
   return year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
 }
 
-int daysInMonth(int year, int month) {
-  constexpr int kDaysPerMonth[] = {31, 28, 31, 30, 31, 30,
-                                   31, 31, 30, 31, 30, 31};
+int32_t daysInMonth(int32_t year, int32_t month) {
+  constexpr int32_t kDaysPerMonth[] = {31, 28, 31, 30, 31, 30,
+                                       31, 31, 30, 31, 30, 31};
   if (month == 2 && isLeapYear(year)) {
     return 29;
   }
   return kDaysPerMonth[month - 1];
 }
 
-int weeksInIsoYear(int year, int januaryFirstWeekday) {
-  const int januaryFirstIsoWeekday =
+int32_t weeksInIsoYear(int32_t year, int32_t januaryFirstWeekday) {
+  const int32_t januaryFirstIsoWeekday =
       januaryFirstWeekday == 0 ? 7 : januaryFirstWeekday;
   return januaryFirstIsoWeekday == 4 ||
                  (januaryFirstIsoWeekday == 3 && isLeapYear(year))
@@ -52,10 +52,15 @@ bool Clock::setDateTime(const DateTime &dateTime) {
       dateTime.day < 1 || dateTime.hour < 0 || dateTime.hour > 23 ||
       dateTime.minute < 0 || dateTime.minute > 59 || dateTime.second < 0 ||
       dateTime.second > 59) {
+    DEBUG_ERROR("Invalid date/time values: %04d-%02d-%02d %02d:%02d:%02d",
+                dateTime.year, dateTime.month, dateTime.day, dateTime.hour,
+                dateTime.minute, dateTime.second);
     return false;
   }
 
   if (dateTime.day > daysInMonth(dateTime.year, dateTime.month)) {
+    DEBUG_ERROR("Invalid day for the given month and year: %04d-%02d-%02d",
+                dateTime.year, dateTime.month, dateTime.day);
     return false;
   }
 

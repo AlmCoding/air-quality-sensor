@@ -37,7 +37,8 @@ public:
   static DataStore &instance();
 
   bool setFileName(const char *fileName);
-  bool addSample(uint16_t co2Ppm, float tempC, float rhPct, bool windowOpen);
+  bool addSample(uint16_t co2Ppm, float tempC, float rhPct, bool windowOpen,
+                 uint32_t unixTimestamp);
   size_t sampleCount() const;
   bool isInErrorState() const;
 

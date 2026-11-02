@@ -1,7 +1,6 @@
 #include "DataStore.h"
 #include "common.h"
 
-#include "Clock.h"
 #include "helper.h"
 
 #include <LittleFS.h>
@@ -33,7 +32,7 @@ bool DataStore::setFileName(const char *fileName) {
 }
 
 bool DataStore::addSample(uint16_t co2Ppm, float tempC, float rhPct,
-                          bool windowOpen) {
+                          bool windowOpen, uint32_t unixTimestamp) {
   assert(sampleCount_ < aqlog::kEntriesPerBlock);
 
   if (errorState_) {
@@ -55,13 +54,8 @@ bool DataStore::addSample(uint16_t co2Ppm, float tempC, float rhPct,
   const float rhPct_x100 = rhPct * 100.0f;
 
   if (sampleCount_ == 0) {
-    uint32_t timestamp = 0;
-    if (!Clock::instance().isSet() ||
-        !Clock::instance().getUnixTime(timestamp)) {
-      DEBUG_ERROR("Failed to get Unix time from Clock!");
-      return false;
-    }
-    block_.timestamp = timestamp;
+    DEBUG_INFO("Set block timestamp to: %u", unixTimestamp);
+    block_.timestamp = unixTimestamp;
   }
 
   aqlog::Entry &entry = block_.entries[sampleCount_];
@@ -141,6 +135,7 @@ bool DataStore::writeBlock() {
     return false;
   }
 
+  DEBUG_INFO("Block successfully written to file: %s", fileName_);
   return true;
 }
 
@@ -220,6 +215,7 @@ bool DataStore::ensureFileSystemMounted() {
     return false;
   }
 
+  DEBUG_INFO("File system mounted successfully");
   fileSystemMounted_ = true;
   return true;
 }

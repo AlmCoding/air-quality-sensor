@@ -40,18 +40,36 @@ bool Sampler::init() {
     return false;
   }
 
+  // Test clock functionality ----------------------------------
+  DateTime dateTime = {.year = 2026,
+                       .month = 11,
+                       .day = 1,
+                       .hour = 12,
+                       .minute = 00,
+                       .second = 0};
+  if (!Clock::instance().setDateTime(dateTime)) {
+    DEBUG_ERROR("Failed to set clock date/time!");
+    return false;
+  }
+  // -----------------------------------------------------------
+
   DEBUG_INFO("Sampler initialized successfully!");
   initialized_ = true;
   return true;
 }
 
 void Sampler::run() {
-  if (!initialized_ || !isSampleDue() || (kScd41Enabled && !isDataReady())) {
+  if (!initialized_) {
     return;
   }
 
-  DEBUG_INFO("Sampling air quality data ...\n");
+  updateDisplayedTime();
 
+  if (!isSampleDue() || (kScd41Enabled && !isDataReady())) {
+    return;
+  }
+
+  DEBUG_INFO("Sampling air quality data ...");
   bool windowOpen = false;
   uint16_t co2Ppm = 0;
   float tempC = 0.0f;
@@ -60,12 +78,17 @@ void Sampler::run() {
     return;
   }
   recordSampleTime();
-  display_.show({co2Ppm, tempC, rhPct, windowOpen});
+  display_.drawSample({co2Ppm, tempC, rhPct, windowOpen});
 
   if (!kScd41Enabled) {
     return;
   }
 
+  storeSample(co2Ppm, tempC, rhPct, windowOpen);
+}
+
+void Sampler::storeSample(uint16_t co2Ppm, float tempC, float rhPct,
+                          bool windowOpen) {
   if (!Clock::instance().isSet()) {
     DEBUG_ERROR("Skipping sample storage due to clock not set!");
     return;
@@ -94,10 +117,50 @@ void Sampler::run() {
       DEBUG_ERROR("Failed to set DataStore file name: %s", fileName);
       return;
     }
+    DEBUG_INFO("DataStore file name set to: %s", fileName);
   }
 
-  if (!dataStore.addSample(co2Ppm, tempC, rhPct, windowOpen)) {
+  uint32_t unixTimestamp = 0;
+  if (!Clock::instance().getUnixTime(unixTimestamp)) {
+    DEBUG_ERROR("Failed to get Unix time from Clock!");
+    return;
+  }
+
+  if (!dataStore.addSample(co2Ppm, tempC, rhPct, windowOpen, unixTimestamp)) {
     DEBUG_ERROR("Failed to store SCD41 sample!");
+  }
+}
+
+void Sampler::updateDisplayedTime() {
+  Clock &clock = Clock::instance();
+  if (!clock.isSet()) {
+    if (!hasDisplayedTime_) {
+      display_.drawTime({});
+      hasDisplayedTime_ = true;
+    }
+    return;
+  }
+
+  uint32_t currentUnixTime = 0;
+  if (!clock.getUnixTime(currentUnixTime)) {
+    DEBUG_ERROR("Failed to get clock time for display update!");
+    return;
+  }
+
+  const uint32_t currentMinute = currentUnixTime / 60;
+  if (!hasDisplayedTime_ || currentMinute != lastDisplayedMinute_) {
+    DateTime dateTime = {};
+    if (!clock.getDateTime(dateTime)) {
+      DEBUG_ERROR("Failed to get date/time for display update!");
+      return;
+    }
+
+    DEBUG_INFO("Update displayed time: %02u:%02u", //
+               (currentMinute / 60) % 24, currentMinute % 60);
+    display_.drawTime({dateTime.year, dateTime.month, dateTime.day,
+                       dateTime.hour, dateTime.minute, true});
+    lastDisplayedMinute_ = currentMinute;
+    hasDisplayedTime_ = true;
   }
 }
 

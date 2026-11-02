@@ -1,7 +1,5 @@
 #include "Display.h"
 
-#include "Clock.h"
-
 #include <Adafruit_SSD1306.h>
 #include <Wire.h>
 
@@ -30,24 +28,29 @@ bool Display::init() {
   return true;
 }
 
-void Display::show(const SampleData &sample) {
-  display.clearDisplay();
+void Display::drawTime(const TimeData &time) {
+  char line[32] = {};
   display.setTextColor(SSD1306_WHITE);
   display.setTextSize(1);
-
-  char line[32] = {};
-  DateTime dateTime = {};
+  display.fillRect(0, 0, kScreenWidth, kLineHeight, SSD1306_BLACK);
   display.setCursor(0, 0);
-  if (Clock::instance().isSet() && Clock::instance().getDateTime(dateTime)) {
-    std::snprintf(
-        line, sizeof(line), "%04ld-%02ld-%02ld %02ld:%02ld",
-        static_cast<long>(dateTime.year), static_cast<long>(dateTime.month),
-        static_cast<long>(dateTime.day), static_cast<long>(dateTime.hour),
-        static_cast<long>(dateTime.minute));
+  if (time.isSet) {
+    std::snprintf(line, sizeof(line), "%04ld-%02ld-%02ld %02ld:%02ld",
+                  static_cast<long>(time.year), static_cast<long>(time.month),
+                  static_cast<long>(time.day), static_cast<long>(time.hour),
+                  static_cast<long>(time.minute));
   } else {
     std::snprintf(line, sizeof(line), "Date not set!");
   }
   display.print(line);
+  display.display();
+}
+
+void Display::drawSample(const SampleData &sample) {
+  display.fillRect(0, kLineHeight, kScreenWidth, kScreenHeight - kLineHeight,
+                   SSD1306_BLACK);
+  display.setTextColor(SSD1306_WHITE);
+  display.setTextSize(1);
 
   display.setCursor(0, kLineHeight);
   display.printf("CO2: %u ppm", sample.co2Ppm);

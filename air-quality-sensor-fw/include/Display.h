@@ -9,10 +9,20 @@ struct SampleData {
   bool windowOpen;
 };
 
+struct TimeData {
+  int32_t year;
+  int32_t month;
+  int32_t day;
+  int32_t hour;
+  int32_t minute;
+  bool isSet;
+};
+
 class Display {
 public:
   bool init();
-  void show(const SampleData &sample);
+  void drawTime(const TimeData &time);
+  void drawSample(const SampleData &sample);
 
 private:
   static constexpr uint8_t kI2cAddress = 0x3C;

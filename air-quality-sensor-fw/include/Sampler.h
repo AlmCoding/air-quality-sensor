@@ -21,6 +21,9 @@ private:
   bool isDataReady();
   bool readMeasurement(uint16_t &co2Ppm, float &tempC, float &rhPct);
   void recordSampleTime();
+  void storeSample(uint16_t co2Ppm, float tempC, float rhPct,
+                   bool windowOpen);
+  void updateDisplayedTime();
 
   Display display_;
   SensirionI2cScd4x sensor_;
@@ -31,4 +34,6 @@ private:
   uint32_t lastSampleMillis_ = 0;
   uint32_t lastSampleUnixTime_ = 0;
   uint32_t lastDataReadyCheckMillis_ = 0;
+  uint32_t lastDisplayedMinute_ = 0;
+  bool hasDisplayedTime_ = false;
 };
