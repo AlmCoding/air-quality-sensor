@@ -23,8 +23,6 @@ constexpr bool kScd41Enabled = false;
 } // namespace
 
 bool Sampler::init() {
-  Wire.begin();
-
   if (kScd41Enabled) {
     sensor_.begin(Wire, SCD41_I2C_ADDR_62);
 
@@ -34,24 +32,6 @@ bool Sampler::init() {
       return false;
     }
   }
-
-  if (!display_.init()) {
-    DEBUG_ERROR("SSD1306 display initialization failed!");
-    return false;
-  }
-
-  // Test clock functionality ----------------------------------
-  DateTime dateTime = {.year = 2026,
-                       .month = 11,
-                       .day = 1,
-                       .hour = 12,
-                       .minute = 00,
-                       .second = 0};
-  if (!Clock::instance().setDateTime(dateTime)) {
-    DEBUG_ERROR("Failed to set clock date/time!");
-    return false;
-  }
-  // -----------------------------------------------------------
 
   DEBUG_INFO("Sampler initialized successfully!");
   initialized_ = true;
@@ -78,7 +58,7 @@ void Sampler::run() {
     return;
   }
   recordSampleTime();
-  display_.drawSample({co2Ppm, tempC, rhPct, windowOpen});
+  Display::instance().drawSample({co2Ppm, tempC, rhPct, windowOpen});
 
   if (!kScd41Enabled) {
     return;
@@ -135,7 +115,7 @@ void Sampler::updateDisplayedTime() {
   Clock &clock = Clock::instance();
   if (!clock.isSet()) {
     if (!hasDisplayedTime_) {
-      display_.drawTime({});
+      Display::instance().drawTime({});
       hasDisplayedTime_ = true;
     }
     return;
@@ -157,8 +137,8 @@ void Sampler::updateDisplayedTime() {
 
     DEBUG_INFO("Update displayed time: %02u:%02u", //
                (currentMinute / 60) % 24, currentMinute % 60);
-    display_.drawTime({dateTime.year, dateTime.month, dateTime.day,
-                       dateTime.hour, dateTime.minute, true});
+    Display::instance().drawTime({dateTime.year, dateTime.month, dateTime.day,
+                                  dateTime.hour, dateTime.minute, true});
     lastDisplayedMinute_ = currentMinute;
     hasDisplayedTime_ = true;
   }

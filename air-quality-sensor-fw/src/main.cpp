@@ -1,6 +1,9 @@
 #include <Arduino.h>
+#include <Wire.h>
 
+#include "Connectivity.h"
 #include "DataStore.h"
+#include "Display.h"
 #include "Sampler.h"
 #include "common.h"
 
@@ -37,6 +40,16 @@ void setup() {
   DEBUG_INFO("Free heap: %u bytes", ESP.getFreeHeap());
   DEBUG_INFO("CPU frequency: %d MHz", getCpuFrequencyMhz());
 
+  Wire.begin();
+
+  if (!Display::instance().init()) {
+    DEBUG_ERROR("SSD1306 display initialization failed!");
+  }
+
+  if (!Connectivity::instance().init()) {
+    DEBUG_ERROR("Failed to initialize connectivity!");
+  }
+
   if (!sampler.init()) {
     DEBUG_ERROR("Failed to initialize sampler!");
   }
@@ -44,4 +57,7 @@ void setup() {
   DEBUG_INFO("Setup Air Quality Sensor [OK]");
 }
 
-void loop() { sampler.run(); }
+void loop() {
+  Connectivity::instance().run();
+  sampler.run();
+}

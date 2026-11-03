@@ -20,10 +20,17 @@ struct TimeData {
 
 class Display {
 public:
+  static Display &instance();
+
   bool init();
   void drawTime(const TimeData &time);
   void drawSample(const SampleData &sample);
+  void drawSyncing();
 
 private:
+  Display() = default;
+  Display(const Display &) = delete;
+  Display &operator=(const Display &) = delete;
+
   static constexpr uint8_t kI2cAddress = 0x3C;
 };

@@ -16,6 +16,11 @@ Adafruit_SSD1306 display(kScreenWidth, kScreenHeight, &Wire, kResetPin);
 
 } // namespace
 
+Display &Display::instance() {
+  static Display displayInstance;
+  return displayInstance;
+}
+
 bool Display::init() {
   if (!display.begin(SSD1306_SWITCHCAPVCC, kI2cAddress)) {
     return false;
@@ -60,5 +65,14 @@ void Display::drawSample(const SampleData &sample) {
   display.printf("Humidity: %.1f %%", sample.humidityPct);
   display.setCursor(0, kLineHeight * 4);
   display.printf("Window: %s", sample.windowOpen ? "OPEN" : "CLOSED");
+  display.display();
+}
+
+void Display::drawSyncing() {
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.print("WiFi time syncing...");
   display.display();
 }

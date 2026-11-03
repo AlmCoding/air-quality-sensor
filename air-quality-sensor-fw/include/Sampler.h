@@ -25,7 +25,6 @@ private:
                    bool windowOpen);
   void updateDisplayedTime();
 
-  Display display_;
   SensirionI2cScd4x sensor_;
   bool initialized_ = false;
   bool hasSampled_ = false;
