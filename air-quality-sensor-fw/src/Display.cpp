@@ -45,7 +45,7 @@ void Display::drawTime(const TimeData &time) {
                   static_cast<long>(time.day), static_cast<long>(time.hour),
                   static_cast<long>(time.minute));
   } else {
-    std::snprintf(line, sizeof(line), "Date not set!");
+    std::snprintf(line, sizeof(line), "Time not set!");
   }
   display.print(line);
   display.display();

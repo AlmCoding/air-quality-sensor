@@ -12,7 +12,7 @@ public:
   void run();
 
 private:
-  static constexpr uint32_t kSampleIntervalSeconds = 6 * 60;
+  static constexpr uint32_t kSampleIntervalSeconds = 5 * 60;
   static constexpr uint32_t kSampleIntervalMillis =
       kSampleIntervalSeconds * 1000UL;
   static constexpr uint32_t kDataReadyCheckIntervalMillis = 100;
@@ -21,8 +21,7 @@ private:
   bool isDataReady();
   bool readMeasurement(uint16_t &co2Ppm, float &tempC, float &rhPct);
   void recordSampleTime();
-  void storeSample(uint16_t co2Ppm, float tempC, float rhPct,
-                   bool windowOpen);
+  void storeSample(uint16_t co2Ppm, float tempC, float rhPct, bool windowOpen);
   void updateDisplayedTime();
 
   SensirionI2cScd4x sensor_;

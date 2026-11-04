@@ -43,11 +43,11 @@ void Sampler::run() {
     return;
   }
 
-  updateDisplayedTime();
-
   if (!isSampleDue() || (kScd41Enabled && !isDataReady())) {
     return;
   }
+
+  updateDisplayedTime();
 
   DEBUG_INFO("Sampling air quality data ...");
   bool windowOpen = false;
@@ -184,6 +184,7 @@ bool Sampler::isSampleDue() const {
   uint32_t currentUnixTime = 0;
   const bool hasCurrentUnixTime =
       clock.isSet() && clock.getUnixTime(currentUnixTime);
+
   if (hasCurrentUnixTime && lastSampleHadUnixTime_ &&
       currentUnixTime >= lastSampleUnixTime_) {
     return currentUnixTime - lastSampleUnixTime_ >= kSampleIntervalSeconds;

@@ -7,8 +7,9 @@ namespace aqlog {
 
 inline constexpr uint16_t kMagic = 0xA5C3;
 inline constexpr uint8_t kVersion = 0x02;
-inline constexpr size_t kEntriesPerBlock = 10;
-inline constexpr size_t kBlockSize = 78;
+inline constexpr size_t kEntriesPerBlock = 12;
+inline constexpr size_t kBlockSize =
+    8 + 12 * 7; // 8 bytes for header + 12 entries * 7 bytes each
 inline constexpr uint8_t kWindowOpen = 0x01;
 
 #pragma pack(push, 1)
