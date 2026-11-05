@@ -1,12 +1,15 @@
 #include "Connectivity.h"
 #include "Clock.h"
+#include "DataStore.h"
 #include "Display.h"
 #include "common.h"
 
 #include <Arduino.h>
+#include <WebServer.h>
 #include <WiFi.h>
 #include <esp_sntp.h>
 #include <time.h>
+#include <vector>
 
 #if __has_include("ConnectivityConfig.h")
 #include "ConnectivityConfig.h"
@@ -36,6 +39,10 @@ constexpr char kNtpServer[] = "pool.ntp.org";
 constexpr uint32_t kWifiConnectTimeoutMillis = 10000;
 constexpr uint32_t kTimeSyncTimeoutMillis = 10000;
 constexpr int32_t kDailySyncHour = 20;
+constexpr uint8_t kServiceButtonPin = 4;
+constexpr uint32_t kFileServerDurationMillis = 10 * 60 * 1000;
+
+WebServer fileServer(80);
 
 std::atomic<uint8_t> lastDisconnectReason{0};
 
@@ -56,7 +63,7 @@ const char *wifiStatusName(wl_status_t status) {
   }
 }
 
-bool nextDayAtSyncTime(time_t &nextSyncTime) {
+bool updateNextSyncTime(time_t &nextSyncTime) {
   const time_t now = time(nullptr);
   struct tm localTime = {};
   if (now < 0 || localtime_r(&now, &localTime) == nullptr) {
@@ -72,6 +79,65 @@ bool nextDayAtSyncTime(time_t &nextSyncTime) {
   return nextSyncTime != static_cast<time_t>(-1);
 }
 
+String jsonEscape(const String &value) {
+  String escaped;
+  escaped.reserve(value.length());
+  for (size_t index = 0; index < value.length(); ++index) {
+    const unsigned char character = value[index];
+    switch (character) {
+    case '"':
+      escaped += "\\\"";
+      break;
+    case '\\':
+      escaped += "\\\\";
+      break;
+    case '\b':
+      escaped += "\\b";
+      break;
+    case '\f':
+      escaped += "\\f";
+      break;
+    case '\n':
+      escaped += "\\n";
+      break;
+    case '\r':
+      escaped += "\\r";
+      break;
+    case '\t':
+      escaped += "\\t";
+      break;
+    default:
+      if (character < 0x20) {
+        escaped += ' ';
+      } else {
+        escaped += static_cast<char>(character);
+      }
+      break;
+    }
+  }
+  return escaped;
+}
+
+String makeFileListJson(const String &path,
+                        const std::vector<DataStoreFile> &files) {
+  String response;
+  response.reserve(48 + path.length() + files.size() * 48);
+  response = "{\"path\":\"";
+  response += jsonEscape(path);
+  response += "\",\"files\":[";
+  for (size_t index = 0; index < files.size(); ++index) {
+    if (index != 0) {
+      response += ',';
+    }
+    response += "{\"name\":\"";
+    response += jsonEscape(files[index].name);
+    response += "\",\"isDir\":";
+    response += files[index].isDirectory ? "true}" : "false}";
+  }
+  response += "]}";
+  return response;
+}
+
 } // namespace
 
 Connectivity &Connectivity::instance() {
@@ -80,7 +146,24 @@ Connectivity &Connectivity::instance() {
 }
 
 bool Connectivity::init() {
-  initialized_ = false;
+  pinMode(kServiceButtonPin, INPUT_PULLUP);
+
+  fileServer.on("/api/files", HTTP_GET, []() {
+    const String path =
+        fileServer.hasArg("path") ? fileServer.arg("path") : "/";
+    DEBUG_INFO("Requested LittleFS path: %s", path.c_str());
+    std::vector<DataStoreFile> files;
+    if (!DataStore::instance().listFiles(path.c_str(), files)) {
+      fileServer.send(400, "application/json",
+                      "{\"error\":\"Invalid path or directory unavailable\"}");
+      return;
+    }
+    fileServer.send(200, "application/json", makeFileListJson(path, files));
+  });
+  fileServer.onNotFound([]() {
+    fileServer.send(404, "application/json", "{\"error\":\"Not found\"}");
+  });
+
   setenv("TZ", kTimeZone, 1);
   tzset();
   sntp_set_time_sync_notification_cb(&Connectivity::onTimeSync);
@@ -92,18 +175,34 @@ bool Connectivity::init() {
     return false;
   }
 
-  if (!nextDayAtSyncTime(nextSyncTime_)) {
+  if (!updateNextSyncTime(nextSyncTime_)) {
     DEBUG_ERROR("Failed to calculate the next time synchronization!");
     return false;
   }
 
   initialized_ = true;
+
+  // TEMP: Remove after verifying the physical service button.
+  startFileServer();
   return true;
 }
 
 void Connectivity::run() {
   if (!initialized_) {
     return;
+  }
+
+  if (digitalRead(kServiceButtonPin) == LOW) {
+    startFileServer();
+  }
+
+  if (fileServerActive_) {
+    if (static_cast<uint32_t>(millis() - fileServerStartMillis_) >=
+        kFileServerDurationMillis) {
+      stopFileServer();
+    } else {
+      fileServer.handleClient();
+    }
   }
 
   if (time(nullptr) < nextSyncTime_) {
@@ -113,17 +212,36 @@ void Connectivity::run() {
   DEBUG_INFO("Attempting scheduled time synchronization ...");
   syncTime();
 
-  if (!nextDayAtSyncTime(nextSyncTime_)) {
+  if (!updateNextSyncTime(nextSyncTime_)) {
     DEBUG_ERROR("Failed to calculate the next time synchronization!");
-    initialized_ = false;
   }
 }
 
-void Connectivity::onTimeSync(struct timeval *) {
-  Connectivity::instance().timeSyncReceived_.store(true);
+void Connectivity::startFileServer() {
+  if (!initialized_ || fileServerActive_) {
+    return;
+  }
+
+  if (!connectToWifi()) {
+    return;
+  }
+
+  fileServer.begin();
+  fileServerStartMillis_ = millis();
+  fileServerActive_ = true;
+  DEBUG_INFO("File server started at http://%s/api/files?path=/ for 10 minutes",
+             WiFi.localIP().toString().c_str());
 }
 
-bool Connectivity::syncTime() {
+void Connectivity::stopFileServer() {
+  fileServer.stop();
+  WiFi.disconnect(true, false);
+  WiFi.mode(WIFI_OFF);
+  fileServerActive_ = false;
+  DEBUG_INFO("File server stopped");
+}
+
+bool Connectivity::connectToWifi() {
   ASSERT(CONNECTIVITY_WIFI_SSID[0] != '\0' &&
          CONNECTIVITY_WIFI_PASSWORD[0] != '\0');
 
@@ -139,23 +257,24 @@ bool Connectivity::syncTime() {
   WiFi.persistent(false);
   WiFi.setAutoReconnect(false);
   WiFi.setSleep(false);
-  lastDisconnectReason.store(0);
   WiFi.mode(WIFI_STA);
-  if (!WiFi.setTxPower(WIFI_POWER_8_5dBm)) {
-    DEBUG_ERROR("Failed to set Wi-Fi transmit power to 8.5 dBm!");
-  } else {
-    DEBUG_INFO("Wi-Fi transmit power set to 8.5 dBm");
-  }
-  WiFi.begin(CONNECTIVITY_WIFI_SSID, CONNECTIVITY_WIFI_PASSWORD);
+  if (WiFi.status() != WL_CONNECTED) {
+    lastDisconnectReason.store(0);
+    if (!WiFi.setTxPower(WIFI_POWER_8_5dBm)) {
+      DEBUG_ERROR("Failed to set Wi-Fi transmit power to 8.5 dBm!");
+    } else {
+      DEBUG_INFO("Wi-Fi transmit power set to 8.5 dBm");
+    }
+    WiFi.begin(CONNECTIVITY_WIFI_SSID, CONNECTIVITY_WIFI_PASSWORD);
 
-  const uint32_t connectStartMillis = millis();
-  while (WiFi.status() != WL_CONNECTED &&
-         static_cast<uint32_t>(millis() - connectStartMillis) <
-             kWifiConnectTimeoutMillis) {
-    delay(100);
+    const uint32_t connectStartMillis = millis();
+    while (WiFi.status() != WL_CONNECTED &&
+           static_cast<uint32_t>(millis() - connectStartMillis) <
+               kWifiConnectTimeoutMillis) {
+      delay(100);
+    }
   }
 
-  bool synced = false;
   if (WiFi.status() != WL_CONNECTED) {
     const wl_status_t status = WiFi.status();
     const uint8_t reason = lastDisconnectReason.load();
@@ -164,43 +283,63 @@ bool Connectivity::syncTime() {
                 reason == 0 ? "not reported"
                             : WiFi.disconnectReasonName(
                                   static_cast<wifi_err_reason_t>(reason)));
+    WiFi.disconnect(true, false);
+    WiFi.mode(WIFI_OFF);
+    return false;
+  }
+
+  return true;
+}
+
+void Connectivity::onTimeSync(struct timeval *) {
+  Connectivity::instance().timeSyncReceived_.store(true);
+}
+
+bool Connectivity::syncTime() {
+  if (!connectToWifi()) {
+    return false;
+  }
+
+  timeSyncReceived_.store(false);
+  configTzTime(kTimeZone, kNtpServer);
+
+  const uint32_t syncStartMillis = millis();
+  while (!timeSyncReceived_.load() &&
+         static_cast<uint32_t>(millis() - syncStartMillis) <
+             kTimeSyncTimeoutMillis) {
+    delay(100);
+  }
+
+  bool synced = false;
+  if (!timeSyncReceived_.load()) {
+    DEBUG_ERROR("Timed out waiting for the time server!");
   } else {
-    timeSyncReceived_.store(false);
-    configTzTime(kTimeZone, kNtpServer);
-
-    const uint32_t syncStartMillis = millis();
-    while (!timeSyncReceived_.load() &&
-           static_cast<uint32_t>(millis() - syncStartMillis) <
-               kTimeSyncTimeoutMillis) {
-      delay(100);
-    }
-
-    if (!timeSyncReceived_.load()) {
-      DEBUG_ERROR("Timed out waiting for the time server!");
+    struct tm timeInfo = {};
+    if (!getLocalTime(&timeInfo, 1000)) {
+      DEBUG_ERROR("Failed to read synchronized time!");
     } else {
-      struct tm timeInfo = {};
-      if (!getLocalTime(&timeInfo, 1000)) {
-        DEBUG_ERROR("Failed to read synchronized time!");
-      } else {
-        const DateTime dateTime = {.year = timeInfo.tm_year + 1900,
-                                   .month = timeInfo.tm_mon + 1,
-                                   .day = timeInfo.tm_mday,
-                                   .hour = timeInfo.tm_hour,
-                                   .minute = timeInfo.tm_min,
-                                   .second = timeInfo.tm_sec};
-        synced = Clock::instance().setDateTime(dateTime);
-        if (!synced) {
-          DEBUG_ERROR("Failed to set Clock from the time server!");
-        }
+      const DateTime dateTime = {.year = timeInfo.tm_year + 1900,
+                                 .month = timeInfo.tm_mon + 1,
+                                 .day = timeInfo.tm_mday,
+                                 .hour = timeInfo.tm_hour,
+                                 .minute = timeInfo.tm_min,
+                                 .second = timeInfo.tm_sec};
+      synced = Clock::instance().setDateTime(dateTime);
+      if (!synced) {
+        DEBUG_ERROR("Failed to set Clock from the time server!");
       }
     }
   }
 
-  WiFi.disconnect(true, false);
-  WiFi.mode(WIFI_OFF);
+  if (!fileServerActive_) {
+    WiFi.disconnect(true, false);
+    WiFi.mode(WIFI_OFF);
+  }
 
   if (synced) {
-    DEBUG_INFO("Clock synchronized; WiFi disabled.");
+    DEBUG_INFO(fileServerActive_
+                   ? "Clock synchronized; WiFi retained for file server."
+                   : "Clock synchronized; WiFi disabled.");
   }
   return synced;
 }

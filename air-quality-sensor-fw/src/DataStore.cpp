@@ -31,6 +31,53 @@ bool DataStore::setFileName(const char *fileName) {
   return helper::copyCString(fileName, fileName_, sizeof(fileName_));
 }
 
+bool DataStore::listFiles(const char *path,
+                          std::vector<DataStoreFile> &files) {
+  files.clear();
+  if (helper::isCStringEmpty(path) || path[0] != '/') {
+    return false;
+  }
+
+  const char *segment = path;
+  while (*segment != '\0') {
+    while (*segment == '/') {
+      ++segment;
+    }
+    const char *segmentStart = segment;
+    while (*segment != '\0' && *segment != '/') {
+      if (*segment == '\\') {
+        return false;
+      }
+      ++segment;
+    }
+    if (segment - segmentStart == 2 && segmentStart[0] == '.' &&
+        segmentStart[1] == '.') {
+      return false;
+    }
+  }
+
+  if (!ensureFileSystemMounted()) {
+    return false;
+  }
+
+  File directory = LittleFS.open(path);
+  if (!directory || !directory.isDirectory()) {
+    if (directory) {
+      directory.close();
+    }
+    return false;
+  }
+
+  File entry = directory.openNextFile();
+  while (entry) {
+    files.push_back({String(entry.name()), entry.isDirectory()});
+    entry.close();
+    entry = directory.openNextFile();
+  }
+  directory.close();
+  return true;
+}
+
 bool DataStore::addSample(uint16_t co2Ppm, float tempC, float rhPct,
                           bool windowOpen, uint32_t unixTimestamp) {
   assert(sampleCount_ < aqlog::kEntriesPerBlock);

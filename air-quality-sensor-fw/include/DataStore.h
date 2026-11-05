@@ -1,7 +1,9 @@
 #pragma once
 
+#include <Arduino.h>
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 namespace aqlog {
 
@@ -33,11 +35,17 @@ static_assert(kBlockSize == 8 + kEntriesPerBlock * 7, "block size mismatch");
 
 } // namespace aqlog
 
+struct DataStoreFile {
+  String name;
+  bool isDirectory;
+};
+
 class DataStore {
 public:
   static DataStore &instance();
 
   bool setFileName(const char *fileName);
+  bool listFiles(const char *path, std::vector<DataStoreFile> &files);
   bool addSample(uint16_t co2Ppm, float tempC, float rhPct, bool windowOpen,
                  uint32_t unixTimestamp);
   size_t sampleCount() const;
