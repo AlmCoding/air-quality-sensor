@@ -16,12 +16,6 @@
 #define DEBUG_ERROR(...)
 #endif
 
-namespace {
-
-constexpr bool kScd41Enabled = false;
-
-} // namespace
-
 bool Sampler::init() {
   if (kScd41Enabled) {
     sensor_.begin(Wire, SCD41_I2C_ADDR_62);
@@ -47,10 +41,10 @@ void Sampler::run() {
     return;
   }
 
+  updateWindowOpenTime();
   updateDisplayedTime();
 
   DEBUG_INFO("Sampling air quality data ...");
-  bool windowOpen = false;
   uint16_t co2Ppm = 0;
   float tempC = 0.0f;
   float rhPct = 0.0f;
@@ -58,17 +52,22 @@ void Sampler::run() {
     return;
   }
   recordSampleTime();
-  Display::instance().drawSample({co2Ppm, tempC, rhPct, windowOpen});
+  Display::instance().drawSample({co2Ppm, tempC, rhPct, windowOpen_});
 
   if (!kScd41Enabled) {
     return;
   }
 
-  storeSample(co2Ppm, tempC, rhPct, windowOpen);
+  if (sampleCounter_ < kSampleStoreReductionFactor - 1) {
+    sampleCounter_++;
+    return;
+  }
+  sampleCounter_ = 0;
+  storeSample(co2Ppm, tempC, rhPct, windowOpenSeconds_);
 }
 
 void Sampler::storeSample(uint16_t co2Ppm, float tempC, float rhPct,
-                          bool windowOpen) {
+                          uint32_t windowOpenSeconds) {
   if (!Clock::instance().isSet()) {
     DEBUG_ERROR("Skipping sample storage due to clock not set!");
     return;
@@ -91,7 +90,7 @@ void Sampler::storeSample(uint16_t co2Ppm, float tempC, float rhPct,
     }
 
     char fileName[32] = {};
-    std::snprintf(fileName, sizeof(fileName), "log_%04d_%02d.bin", //
+    std::snprintf(fileName, sizeof(fileName), "/log_%04d_%02d.bin", //
                   year, weekNumber);
     if (!dataStore.setFileName(fileName)) {
       DEBUG_ERROR("Failed to set DataStore file name: %s", fileName);
@@ -106,8 +105,21 @@ void Sampler::storeSample(uint16_t co2Ppm, float tempC, float rhPct,
     return;
   }
 
-  if (!dataStore.addSample(co2Ppm, tempC, rhPct, windowOpen, unixTimestamp)) {
+  if (!dataStore.addSample(co2Ppm, tempC, rhPct,
+                           static_cast<uint16_t>(windowOpenSeconds),
+                           unixTimestamp)) {
     DEBUG_ERROR("Failed to store SCD41 sample!");
+  }
+}
+
+void Sampler::updateWindowOpenTime() {
+  const uint32_t currentMillis = millis();
+  if (windowOpen_) {
+    windowOpenSeconds_ =
+        static_cast<uint32_t>(currentMillis - windowOpenStartMillis_) / 1000UL;
+  } else {
+    windowOpenSeconds_ = 0;
+    windowOpenStartMillis_ = currentMillis;
   }
 }
 

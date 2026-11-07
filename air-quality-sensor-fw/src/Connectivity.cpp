@@ -149,8 +149,13 @@ bool Connectivity::init() {
   pinMode(kServiceButtonPin, INPUT_PULLUP);
 
   fileServer.on("/api/files", HTTP_GET, []() {
-    const String path =
-        fileServer.hasArg("path") ? fileServer.arg("path") : "/";
+    if (!fileServer.hasArg("path")) {
+      fileServer.send(400, "application/json",
+                      "{\"error\":\"Missing path parameter\"}");
+      return;
+    }
+
+    const String path = fileServer.arg("path");
     DEBUG_INFO("Requested LittleFS path: %s", path.c_str());
     std::vector<DataStoreFile> files;
     if (!DataStore::instance().listFiles(path.c_str(), files)) {
@@ -159,6 +164,22 @@ bool Connectivity::init() {
       return;
     }
     fileServer.send(200, "application/json", makeFileListJson(path, files));
+  });
+  fileServer.on("/api/files", HTTP_DELETE, []() {
+    if (!fileServer.hasArg("path")) {
+      fileServer.send(400, "application/json",
+                      "{\"error\":\"Missing path parameter\"}");
+      return;
+    }
+
+    const String path = fileServer.arg("path");
+    DEBUG_INFO("Requested LittleFS file deletion: %s", path.c_str());
+    if (!DataStore::instance().deleteFile(path.c_str())) {
+      fileServer.send(400, "application/json",
+                      "{\"error\":\"Invalid path or file deletion failed\"}");
+    } else {
+      fileServer.send(200, "application/json", "{\"deleted\":true}");
+    }
   });
   fileServer.onNotFound([]() {
     fileServer.send(404, "application/json", "{\"error\":\"Not found\"}");
@@ -181,8 +202,6 @@ bool Connectivity::init() {
   }
 
   initialized_ = true;
-
-  // TEMP: Remove after verifying the physical service button.
   startFileServer();
   return true;
 }

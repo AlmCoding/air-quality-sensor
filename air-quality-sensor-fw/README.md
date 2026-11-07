@@ -1,5 +1,12 @@
 # Air Quality Sensor Firmware
 
+## Flash partitions
+
+The custom [partitions.csv](./partitions.csv) layout is for a 4 MB ESP32-C3:
+it provides a 2 MB LittleFS partition and a single application partition for
+firmware. The single application layout does not support OTA updates. Build and
+upload the filesystem image with PlatformIO's `buildfs` and `uploadfs` targets.
+
 ## LittleFS file-list API
 
 The file-list server connects to the configured Wi-Fi network for 10 minutes
@@ -37,3 +44,12 @@ directory. Each entry has a `name` and an `isDir` flag:
 
 An invalid path or unavailable directory returns HTTP 400. Unknown endpoints
 return HTTP 404.
+
+Delete a file by sending `DELETE /api/files?path=...` with the same URL-encoded
+LittleFS path. Directories cannot be deleted. A successful deletion returns
+`{"deleted":true}`; an invalid path or directory returns HTTP 400, a missing
+file returns HTTP 404, and a filesystem failure returns HTTP 500. For example:
+
+```sh
+curl -X DELETE "http://<device-ip>/api/files?path=%2Flog_2026_45.bin"
+```

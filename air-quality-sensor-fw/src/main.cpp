@@ -46,6 +46,10 @@ void setup() {
     DEBUG_ERROR("SSD1306 display initialization failed!");
   }
 
+  if (!DataStore::instance().init()) {
+    DEBUG_ERROR("Failed to initialize DataStore!");
+  }
+
   if (!Connectivity::instance().init()) {
     DEBUG_ERROR("Failed to initialize connectivity!");
   }

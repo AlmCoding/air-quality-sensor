@@ -23,6 +23,21 @@ DataStore &DataStore::instance() {
   return dataStore;
 }
 
+bool DataStore::init() {
+  if (initialized_) {
+    return true;
+  }
+
+  if (!LittleFS.begin(true)) {
+    DEBUG_ERROR("Failed to mount LittleFS file system!");
+    return false;
+  }
+
+  DEBUG_INFO("File system mounted successfully");
+  initialized_ = true;
+  return true;
+}
+
 bool DataStore::setFileName(const char *fileName) {
   if (helper::isCStringEmpty(fileName)) {
     return false;
@@ -31,32 +46,15 @@ bool DataStore::setFileName(const char *fileName) {
   return helper::copyCString(fileName, fileName_, sizeof(fileName_));
 }
 
-bool DataStore::listFiles(const char *path,
-                          std::vector<DataStoreFile> &files) {
-  files.clear();
-  if (helper::isCStringEmpty(path) || path[0] != '/') {
+bool DataStore::listFiles(const char *path, std::vector<DataStoreFile> &files) {
+  if (!initialized_) {
+    DEBUG_ERROR("Subsystem is not initialized!");
     return false;
   }
 
-  const char *segment = path;
-  while (*segment != '\0') {
-    while (*segment == '/') {
-      ++segment;
-    }
-    const char *segmentStart = segment;
-    while (*segment != '\0' && *segment != '/') {
-      if (*segment == '\\') {
-        return false;
-      }
-      ++segment;
-    }
-    if (segment - segmentStart == 2 && segmentStart[0] == '.' &&
-        segmentStart[1] == '.') {
-      return false;
-    }
-  }
-
-  if (!ensureFileSystemMounted()) {
+  if (helper::isCStringEmpty(path) || path[0] != '/' ||
+      !LittleFS.exists(path)) {
+    DEBUG_ERROR("Invalid path or path does not exist!");
     return false;
   }
 
@@ -65,9 +63,11 @@ bool DataStore::listFiles(const char *path,
     if (directory) {
       directory.close();
     }
+    DEBUG_ERROR("Path is not a directory or cannot be opened!");
     return false;
   }
 
+  files.clear();
   File entry = directory.openNextFile();
   while (entry) {
     files.push_back({String(entry.name()), entry.isDirectory()});
@@ -78,11 +78,43 @@ bool DataStore::listFiles(const char *path,
   return true;
 }
 
+bool DataStore::deleteFile(const char *path) {
+  if (!initialized_) {
+    DEBUG_ERROR("Subsystem is not initialized!");
+    return false;
+  }
+
+  if (helper::isCStringEmpty(path) || path[0] != '/' ||
+      !LittleFS.exists(path)) {
+    DEBUG_ERROR("Invalid path or path does not exist!");
+    return false;
+  }
+
+  File file = LittleFS.open(path);
+  if (!file) {
+    DEBUG_ERROR("Failed to open file for isDirectory check!");
+    return false;
+  }
+  if (file.isDirectory()) {
+    file.close();
+    DEBUG_ERROR("Cannot remove directory!");
+    return false;
+  }
+  file.close();
+
+  if (!LittleFS.remove(path)) {
+    DEBUG_ERROR("Failed to remove file!");
+    return false;
+  }
+  return true;
+}
+
 bool DataStore::addSample(uint16_t co2Ppm, float tempC, float rhPct,
-                          bool windowOpen, uint32_t unixTimestamp) {
+                          uint16_t windowOpenSeconds, uint32_t unixTimestamp) {
   assert(sampleCount_ < aqlog::kEntriesPerBlock);
 
-  if (errorState_) {
+  if (!initialized_ || errorState_) {
+    DEBUG_ERROR("Subsystem is not initialized or in error state!");
     return false;
   }
 
@@ -109,14 +141,14 @@ bool DataStore::addSample(uint16_t co2Ppm, float tempC, float rhPct,
   entry.co2_ppm = co2Ppm;
   entry.temp_c_x100 = static_cast<int16_t>(tempC_x100);
   entry.rh_pct_x100 = static_cast<uint16_t>(rhPct_x100);
-  entry.flags = windowOpen ? aqlog::kWindowOpen : 0;
+  entry.open_seconds = windowOpenSeconds;
   ++sampleCount_;
 
   if (sampleCount_ < aqlog::kEntriesPerBlock) {
-    DEBUG_INFO("Sample(%u/%u) added: CO2=%u, Temp=%d, RH=%u, WindowOpen=%s", //
-               sampleCount_, aqlog::kEntriesPerBlock,                        //
+    DEBUG_INFO("Sample(%u/%u) added: CO2=%u, Temp=%d, RH=%u, OpenSec=%u", //
+               sampleCount_, aqlog::kEntriesPerBlock,                     //
                co2Ppm, entry.temp_c_x100, entry.rh_pct_x100,
-               windowOpen ? "true" : "false");
+               entry.open_seconds);
     return true;
   }
 
@@ -136,7 +168,7 @@ size_t DataStore::sampleCount() const { return sampleCount_; }
 bool DataStore::isInErrorState() const { return errorState_; }
 
 bool DataStore::writeBlock() {
-  if (helper::isCStringEmpty(fileName_) || !ensureFileSystemMounted()) {
+  if (helper::isCStringEmpty(fileName_)) {
     return false;
   }
 
@@ -150,8 +182,9 @@ bool DataStore::writeBlock() {
     helper::writeUint16LittleEndian(serialized + offset + 2,
                                     static_cast<uint16_t>(entry.temp_c_x100));
     helper::writeUint16LittleEndian(serialized + offset + 4, entry.rh_pct_x100);
-    serialized[offset + 6] = entry.flags;
-    offset += 7;
+    helper::writeUint16LittleEndian(serialized + offset + 6,
+                                    entry.open_seconds);
+    offset += 8;
   }
 
   // The zero-initialized CRC field remains zero during calculation.
@@ -249,20 +282,5 @@ bool DataStore::restoreFileToSize(size_t size) {
     return false;
   }
 
-  return true;
-}
-
-bool DataStore::ensureFileSystemMounted() {
-  if (fileSystemMounted_) {
-    return true;
-  }
-
-  if (!LittleFS.begin(false)) {
-    DEBUG_ERROR("Failed to mount LittleFS file system!");
-    return false;
-  }
-
-  DEBUG_INFO("File system mounted successfully");
-  fileSystemMounted_ = true;
   return true;
 }
