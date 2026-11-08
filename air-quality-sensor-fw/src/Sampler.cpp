@@ -41,7 +41,8 @@ void Sampler::run() {
     return;
   }
 
-  updateWindowOpenTime();
+  // Update the displayed time before sampling, so that the display is updated
+  // even if the SCD41 is not enabled.
   updateDisplayedTime();
 
   DEBUG_INFO("Sampling air quality data ...");
@@ -52,6 +53,22 @@ void Sampler::run() {
     return;
   }
   recordSampleTime();
+
+  // Run window open/close control logic here, so that the window open time is
+  // updated even if the SCD41 is not enabled.
+
+  const uint32_t currentMillis = millis();
+  if (windowOpen_) {
+    if (windowOpenStartMillis_ == 0) {
+      windowOpenStartMillis_ = currentMillis;
+    } else {
+      windowOpenSeconds_ =
+          static_cast<uint32_t>(currentMillis - windowOpenStartMillis_) /
+          1000UL;
+    }
+  }
+
+  // Update the display with the latest sample data.
   Display::instance().drawSample({co2Ppm, tempC, rhPct, windowOpen_});
 
   if (!kScd41Enabled) {
@@ -64,6 +81,15 @@ void Sampler::run() {
   }
   sampleCounter_ = 0;
   storeSample(co2Ppm, tempC, rhPct, windowOpenSeconds_);
+
+  windowOpenSeconds_ = 0;
+  if (windowOpen_) {
+    // If window still open, reset the start time to now, so that the next
+    // sample will caclulate window open time correctly.
+    windowOpenStartMillis_ = currentMillis;
+  } else {
+    windowOpenStartMillis_ = 0;
+  }
 }
 
 void Sampler::storeSample(uint16_t co2Ppm, float tempC, float rhPct,
@@ -109,17 +135,6 @@ void Sampler::storeSample(uint16_t co2Ppm, float tempC, float rhPct,
                            static_cast<uint16_t>(windowOpenSeconds),
                            unixTimestamp)) {
     DEBUG_ERROR("Failed to store SCD41 sample!");
-  }
-}
-
-void Sampler::updateWindowOpenTime() {
-  const uint32_t currentMillis = millis();
-  if (windowOpen_) {
-    windowOpenSeconds_ =
-        static_cast<uint32_t>(currentMillis - windowOpenStartMillis_) / 1000UL;
-  } else {
-    windowOpenSeconds_ = 0;
-    windowOpenStartMillis_ = currentMillis;
   }
 }
 

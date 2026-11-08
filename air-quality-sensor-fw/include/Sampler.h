@@ -25,7 +25,6 @@ private:
   void recordSampleTime();
   void storeSample(uint16_t co2Ppm, float tempC, float rhPct,
                    uint32_t windowOpenSeconds);
-  void updateWindowOpenTime();
   void updateDisplayedTime();
 
   SensirionI2cScd4x sensor_;
