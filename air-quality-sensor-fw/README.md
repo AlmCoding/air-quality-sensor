@@ -45,6 +45,18 @@ directory. Each entry has a `name` and an `isDir` flag:
 An invalid path or unavailable directory returns HTTP 400. Unknown endpoints
 return HTTP 404.
 
+Read a file as raw binary data with `GET /api/files/read?path=...`. The `path`
+parameter is URL-encoded, and the response uses the
+`application/octet-stream` content type. For example, save a file from the
+device with:
+
+```sh
+curl --get --data-urlencode "path=/log_2026_45.bin" \
+  http://<device-ip>/api/files/read --output log_2026_45.bin
+```
+
+An invalid path, directory, or unreadable file returns HTTP 400.
+
 Delete a file by sending `DELETE /api/files?path=...` with the same URL-encoded
 LittleFS path. Directories cannot be deleted. A successful deletion returns
 `{"deleted":true}`; an invalid path or directory returns HTTP 400, a missing

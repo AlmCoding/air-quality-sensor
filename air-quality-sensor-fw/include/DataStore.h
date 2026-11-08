@@ -37,6 +37,7 @@ static_assert(kBlockSize == 8 + kEntriesPerBlock * 8, "block size mismatch");
 
 struct DataStoreFile {
   String name;
+  uint32_t size;
   bool isDirectory;
 };
 
@@ -47,6 +48,7 @@ public:
   bool init();
   bool setFileName(const char *fileName);
   bool listFiles(const char *path, std::vector<DataStoreFile> &files);
+  bool readFile(const char *path, std::vector<uint8_t> &contents);
   bool deleteFile(const char *path);
   bool addSample(uint16_t co2Ppm, float tempC, float rhPct,
                  uint16_t windowOpenSeconds, uint32_t unixTimestamp);

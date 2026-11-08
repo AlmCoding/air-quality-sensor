@@ -70,11 +70,52 @@ bool DataStore::listFiles(const char *path, std::vector<DataStoreFile> &files) {
   files.clear();
   File entry = directory.openNextFile();
   while (entry) {
-    files.push_back({String(entry.name()), entry.isDirectory()});
+    files.push_back({String(entry.name()), entry.size(), entry.isDirectory()});
     entry.close();
     entry = directory.openNextFile();
   }
   directory.close();
+  return true;
+}
+
+bool DataStore::readFile(const char *path, std::vector<uint8_t> &contents) {
+  contents.clear();
+  if (!initialized_) {
+    DEBUG_ERROR("Subsystem is not initialized!");
+    return false;
+  }
+
+  if (helper::isCStringEmpty(path) || path[0] != '/' ||
+      !LittleFS.exists(path)) {
+    DEBUG_ERROR("Invalid path or path does not exist!");
+    return false;
+  }
+
+  File file = LittleFS.open(path, FILE_READ);
+  if (!file) {
+    DEBUG_ERROR("Failed to open file for reading!");
+    return false;
+  }
+  if (file.isDirectory()) {
+    file.close();
+    DEBUG_ERROR("Cannot read a directory!");
+    return false;
+  }
+
+  contents.resize(file.size());
+  size_t bytesRead = 0;
+  while (bytesRead < contents.size()) {
+    const size_t count =
+        file.read(contents.data() + bytesRead, contents.size() - bytesRead);
+    if (count == 0) {
+      file.close();
+      contents.clear();
+      DEBUG_ERROR("Failed to read the complete file!");
+      return false;
+    }
+    bytesRead += count;
+  }
+  file.close();
   return true;
 }
 

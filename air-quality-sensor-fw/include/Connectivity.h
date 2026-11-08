@@ -20,6 +20,7 @@ private:
   static void onTimeSync(struct timeval *time);
   bool connectToWifi();
   bool syncTime();
+  void setupFileServer();
   void startFileServer();
   void stopFileServer();
 
