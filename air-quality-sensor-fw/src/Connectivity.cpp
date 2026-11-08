@@ -345,6 +345,7 @@ void Connectivity::onTimeSync(struct timeval *) {
 
 bool Connectivity::syncTime() {
   if (!connectToWifi()) {
+    DEBUG_ERROR("Time synchronization failed due to Wi-Fi connection failure!");
     return false;
   }
 
@@ -386,8 +387,13 @@ bool Connectivity::syncTime() {
 
   if (synced) {
     DEBUG_INFO(fileServerActive_
-                   ? "Clock synchronized; WiFi retained for file server."
-                   : "Clock synchronized; WiFi disabled.");
+                   ? "Time synchronized; WiFi retained for file server."
+                   : "Time synchronized; WiFi disabled.");
+  } else {
+    DEBUG_ERROR(
+        fileServerActive_
+            ? "Time synchronization failed; WiFi retained for file server."
+            : "Time synchronization failed; WiFi disabled.");
   }
   return synced;
 }
