@@ -194,6 +194,7 @@ bool DataStore::addSample(uint16_t co2Ppm, float tempC, float rhPct,
   }
 
   if (!writeBlock()) {
+    ++skippedBlockCount_;
     block_ = aqlog::Block{};
     sampleCount_ = 0;
     return false;
@@ -205,6 +206,10 @@ bool DataStore::addSample(uint16_t co2Ppm, float tempC, float rhPct,
 }
 
 size_t DataStore::sampleCount() const { return sampleCount_; }
+
+uint32_t DataStore::blockTimestamp() const { return block_.timestamp; }
+
+uint32_t DataStore::skippedBlockCount() const { return skippedBlockCount_; }
 
 bool DataStore::isInErrorState() const { return errorState_; }
 

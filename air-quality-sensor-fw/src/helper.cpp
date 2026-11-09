@@ -1,6 +1,7 @@
 #include "helper.h"
 
 #include <cstring>
+#include <ctime>
 
 namespace helper {
 
@@ -23,6 +24,24 @@ bool copyCString(const char *source, char *destination,
   }
 
   std::memcpy(destination, source, length + 1);
+  return true;
+}
+
+bool unixTimestampToHumanReadable(uint32_t unixTimestamp, char *destination,
+                                  size_t destinationSize) {
+  if (destination == nullptr || destinationSize == 0) {
+    return false;
+  }
+
+  const std::time_t timestamp = static_cast<std::time_t>(unixTimestamp);
+  std::tm localTime = {};
+  if (localtime_r(&timestamp, &localTime) == nullptr ||
+      std::strftime(destination, destinationSize, "%Y-%m-%d %H:%M:%S",
+                    &localTime) == 0) {
+    destination[0] = '\0';
+    return false;
+  }
+
   return true;
 }
 

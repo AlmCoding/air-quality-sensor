@@ -3,6 +3,7 @@
 #include "DataStore.h"
 #include "Display.h"
 #include "common.h"
+#include "helper.h"
 
 #include <Arduino.h>
 #include <WebServer.h>
@@ -140,6 +141,36 @@ String makeFileListJson(const String &path,
   return response;
 }
 
+bool makeStatusJson(const DataStore &dataStore, String &response) {
+  response.reserve(160);
+  response = "{\"error\":";
+  response += dataStore.isInErrorState() ? "true" : "false";
+  response += ",\"blockTimestamp\":";
+  const uint32_t blockTimestamp = dataStore.blockTimestamp();
+  response += String(blockTimestamp);
+  response += ",\"blockTime\":";
+  if (blockTimestamp == 0) {
+    response += "null";
+  } else {
+    char formattedTimestamp[20] = {};
+    if (!helper::unixTimestampToHumanReadable(
+            blockTimestamp, formattedTimestamp, sizeof(formattedTimestamp))) {
+      return false;
+    }
+    response += '"';
+    response += formattedTimestamp;
+    response += '"';
+  }
+  response += ",\"samplesInBlock\":";
+  response += String(dataStore.sampleCount());
+  response += ",\"samplesPerBlock\":";
+  response += String(aqlog::kEntriesPerBlock);
+  response += ",\"skippedBlocks\":";
+  response += String(dataStore.skippedBlockCount());
+  response += '}';
+  return true;
+}
+
 } // namespace
 
 Connectivity &Connectivity::instance() {
@@ -204,6 +235,16 @@ void Connectivity::run() {
 }
 
 void Connectivity::setupFileServer() {
+  fileServer.on("/api/status", HTTP_GET, []() {
+    const DataStore &dataStore = DataStore::instance();
+    String response;
+    if (!makeStatusJson(dataStore, response)) {
+      fileServer.send(500, "application/json",
+                      "{\"error\":\"Failed to format block timestamp\"}");
+      return;
+    }
+    fileServer.send(200, "application/json", response);
+  });
   fileServer.on("/api/files/read", HTTP_GET, []() {
     if (!fileServer.hasArg("path")) {
       fileServer.send(400, "application/json",

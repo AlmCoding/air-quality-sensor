@@ -53,6 +53,8 @@ public:
   bool addSample(uint16_t co2Ppm, float tempC, float rhPct,
                  uint16_t windowOpenSeconds, uint32_t unixTimestamp);
   size_t sampleCount() const;
+  uint32_t blockTimestamp() const;
+  uint32_t skippedBlockCount() const;
   bool isInErrorState() const;
 
   DataStore(const DataStore &) = delete;
@@ -70,6 +72,7 @@ private:
   bool initialized_ = false;
   aqlog::Block block_{};
   size_t sampleCount_ = 0;
+  uint32_t skippedBlockCount_ = 0;
   char fileName_[kMaxFileNameLength + 1] = {};
   bool errorState_ = false;
 };
