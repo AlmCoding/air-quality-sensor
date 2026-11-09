@@ -31,6 +31,13 @@ void writeUint16LittleEndian(uint8_t *destination, uint16_t value) {
   destination[1] = static_cast<uint8_t>(value >> 8);
 }
 
+void writeUint32LittleEndian(uint8_t *destination, uint32_t value) {
+  destination[0] = static_cast<uint8_t>(value & 0xFF);
+  destination[1] = static_cast<uint8_t>(value >> 8);
+  destination[2] = static_cast<uint8_t>(value >> 16);
+  destination[3] = static_cast<uint8_t>(value >> 24);
+}
+
 // CRC-16/CCITT-FALSE.
 uint16_t calculateCrc16(const uint8_t *data, size_t length) {
   uint16_t crc = 0xFFFF;

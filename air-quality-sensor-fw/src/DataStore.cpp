@@ -215,7 +215,7 @@ bool DataStore::writeBlock() {
 
   uint8_t serialized[aqlog::kBlockSize] = {};
   helper::writeUint16LittleEndian(serialized, block_.magic);
-  helper::writeUint16LittleEndian(serialized + 4, block_.timestamp);
+  helper::writeUint32LittleEndian(serialized + 4, block_.timestamp);
 
   size_t offset = 8;
   for (const aqlog::Entry &entry : block_.entries) {
